@@ -39,6 +39,7 @@ packageList=(
   "tldr"
   "zoxide"
   "chezmoi"
+  "unzip"
 )
 
 alias=(
@@ -103,7 +104,7 @@ installer() {
 
 loopInstaller() { 
   for package in "${packageList[@]}"; do
-    installer "$1"
+    installer "$package"
   done
 }
 
