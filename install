@@ -40,12 +40,18 @@ packageList=(
   "zoxide"
   "chezmoi"
   "unzip"
+  "eza"
+  "rclone"
+  "wl-clipboard"
+  "npm"
+  "ranger"
+  "most"
+  "cronie"
 )
 
 alias=(
-  'nv="nvim"'
-  'snv="sudo nvim"'
-  'sp="sudo pacman"'
+  'v="nvim"'
+  'u="sudo pacman -Suy"'
   'chx="chmod +x"'
   'rsync-copy="rsync -avzPh"'
   'rsync-move="rsync -avzPh --remove-source-files"'
