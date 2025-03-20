@@ -19,7 +19,6 @@ packageList=(
   "base-devel"
   "github-cli"
   "gh"
-  "cmatrix"
   "neofetch"
   "btop"
   "git"
@@ -44,9 +43,10 @@ packageList=(
   "rclone"
   "wl-clipboard"
   "npm"
-  "ranger"
+  "yazi"
   "most"
   "cronie"
+  "obsidian"
 )
 
 alias=(
@@ -114,9 +114,7 @@ loopInstaller() {
   done
 }
 
-findPackageManager "dnf" "-y install"
 findPackageManager "pacman" "-S --noconfirm --needed"
-findPackageManager "apt" "-y install"
   
 IFS=' ' read -r -a flagsArray <<< "$flags"
 
