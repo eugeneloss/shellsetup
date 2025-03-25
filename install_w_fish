@@ -1,0 +1,348 @@
+#!/bin/bash 
+# colours for shellsetup logo
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+currentDir=$PWD
+
+# for paru
+which pacman > /dev/null 2>&1
+pacmanCode=$?
+
+# while loop vars
+Menu=1
+AliasMenu=1
+
+random=$RANDOM
+
+packageList=(
+  "base-devel"
+  "github-cli"
+  "gh"
+  "neofetch"
+  "btop"
+  "git"
+  "neovim"
+  "fastfetch"
+  "zsh"
+  "fish"
+  "bat"
+  "smbclient"
+  "fzf"
+  "wget"
+  "fd"
+  "tmux"
+  "openssh"
+  "awk"
+  "grep"
+  "sed"
+  "tldr"
+  "zoxide"
+  "chezmoi"
+  "unzip"
+  "eza"
+  "rclone"
+  "wl-clipboard"
+  "npm"
+  "yazi"
+  "most"
+  "cronie"
+  "obsidian"
+)
+
+alias=(
+  'v="nvim"'
+  'u="sudo pacman -Suy"'
+  'chx="chmod +x"'
+  'rsync-copy="rsync -avzPh"'
+  'rsync-move="rsync -avzPh --remove-source-files"'
+  'rsync-update="rsync -avzuPh"'
+  'rsync-synchronize="rsync -avzuPh --delete"'
+  'open="xdg-open"'
+)
+
+plugins=(
+  "git"
+  "zsh-autosuggestions"
+  "zsh-syntax-highlighting"
+  "fzf"
+  "gh"
+  "magic-enter"
+  "colored-man-pages"
+)
+
+fonts=(
+  "Regular"
+  "Bold"
+  "Italic"
+  "Bold Italic"
+)
+
+print_usage() {
+  echo "Usage: -p - list packages"
+}
+
+printPackages(){
+  for package in "${packageList[@]}"
+  do
+    echo "$package"
+  done
+}
+
+while getopts 'p' flag; do
+  case "$flag" in
+    p) printPackages; exit;;
+    *) print_usage
+    exit 1 ;;
+  esac
+done
+
+# check package manager and set install function
+findPackageManager() {
+  which "$1" >/dev/null 2>&1
+  local exitCode=$?
+  [[ $exitCode == 0 ]] && packageManager="$1" && flags="$2" && installerVar=1
+}
+
+installer() {
+  echo "Installing $1"
+  sudo "$packageManager" "${flagsArray[@]}" "$1" 
+}
+
+loopInstaller() { 
+  for package in "${packageList[@]}"; do
+    installer "$package"
+  done
+}
+
+findPackageManager "pacman" "-S --noconfirm --needed"
+  
+IFS=' ' read -r -a flagsArray <<< "$flags"
+
+[[ -z $installerVar ]] && echo "Your package manager is not supported yet"
+
+shellInstall(){
+  echo "Installing $shell"
+  installer "$shell"
+  echo "Checking if $shell is default shell"
+  shellPath=$(which "$shell")
+  if [[ $SHELL != "$shellPath" ]]; then
+    echo "$shell is not default, changing shell"
+    chsh -s "$shellPath"
+  fi
+  if [[ $choice = "full" ]]; then
+    echo "Creating backup of .${shell}rc"
+    cp "$HOME"/."$shell"rc  "$HOME"/."$shell"rc.bak."$random"
+    if [[ $shell == "zsh" ]]; then
+      echo "Installing ohmyzsh"
+      # ohmyzsh installation
+      wget https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh -O - | sed s/RUNZSH:-yes/RUNZSH:-no/g | sh > /dev/null 2>&1
+      # plugins + theme installation
+      git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME"/.oh-my-zsh/custom/themes/powerlevel10k
+      git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME"/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+      git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME"/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+      # plugins integration 
+      echo "Adding plugins"
+      pluginGrep=$(grep '^plugins=(.*)$' "$HOME"/.zshrc)
+      pluginAwk=$(awk -F "[()]" '{print $2}' <<< "$pluginGrep")
+      IFS=' ' read -r -a pluginArray <<< "$pluginAwk"
+      for plugin in "${pluginArray[@]}"
+      do
+        [[ "${plugins[*]}" =~ $plugin ]] || plugins+=("$plugin")
+      done
+      sed -i s/"^plugins=(.*)$"/"plugins=(${plugins[*]})"/g "$HOME"/.zshrc
+      echo "Adding theme"
+      sed -i 's@ZSH_THEME=.*@ZSH_THEME="powerlevel10k/powerlevel10k"@g' "$HOME"/.zshrc
+      echo "Adding git alias"
+      grep "gitc" "$HOME"/.zshrc || echo 'gitc() { git add .; git commit -m "$*:-New Changes"; git push; }' >> "$HOME"/.zshrc
+      echo "Adding zoxide"
+      grep 'eval "\$(zoxide init .*zsh)"' "$HOME"/.zshrc || echo 'eval "$(zoxide init --cmd cd zsh)"' >> "$HOME"/.zshrc
+    elif [[ $shell == "bash" ]]; then
+      echo "Installing ohmybash"
+      # ohmybash installation
+      bash -c "$(wget https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh -O -)" --unattended
+    fi
+  fi
+  # aliases add
+  aliases "$HOME"/."$shell"rc
+  nvimconfig
+}
+
+aliases(){
+  rcFile="$1"
+  for i in "${alias[@]}"
+  do
+    aliasGrep=$(awk -F "\"" '{print $1}' <<< "$i")
+    grep "alias $aliasGrep" "$rcFile" > /dev/null 2>&1
+    grepCode=$?
+    [[ $grepCode == 1 ]] && echo -e "alias $i" >> "$rcFile"
+  done
+  while [[ $AliasMenu == 1 ]]; do
+    echo -e "Any aliases you want to add?\n(1) Yes\n(2) No\n(3) List Current Aliases"
+    read -r aliasChoice
+    if [[ "$aliasChoice" == "1" ]]; then
+      echo "Type in the command that will be run when you use your alias (use '' quotes instead of double quotes if you need to):"
+      read -r aliasCmd
+      echo "Type in the alias for this command:"
+      read -r aliasName
+      echo -e "alias $aliasName=\"$aliasCmd\"" >> "$rcFile"
+    fi
+    [[ "$aliasChoice" == "2" ]] && AliasMenu=0
+    [[ "$aliasChoice" == "3" ]] && grep "^alias.*" "$rcFile"
+  done
+}
+
+nvimconfig(){
+  echo -e "Do you want nvim config too? (Current config will be backed up)\n(1) Yes\n(2) No"
+  read -r nvimconfig
+  if [[ $nvimconfig == 1 ]]; then
+    echo "Creating backup"
+    find "$HOME"/.config -type d -name "nvim" && rsync -avPh "$HOME"/.config/nvim/ "$HOME"/.config/nvim."$random".bak && rm -rf "$HOME"/.config/nvim
+    echo "Cloning config"
+    git clone https://github.com/alexnessy/nvim-config
+    echo "Copying config"
+    cp -r nvim-config/nvim "$HOME"/.config/
+    rm -rf nvim-config
+  fi
+}
+
+fontInstall(){
+  if [[ $shell == "zsh" && $choice == "full" ]]; then
+    echo "Installing fonts"
+    echo -e "Would you like\n(1) MesloLGS (works better with zsh theme)\n(2) JetBrains (looks prettier)"
+    read -r fontChoice
+    [[ $fontChoice == 2 ]] && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/install_manual.sh)"
+    if [[ $fontChoice == 1 ]]; then
+      fontGit="https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS NF "
+      mkdir -p "$HOME"/.local/share/fonts
+      for typeface in "${fonts[@]}"
+      do
+        find "$HOME"/.local/share/fonts -type f -name "MesloLGS NF ${typeface}.ttf"|grep "."
+        findCode=${PIPESTATUS[1]}
+        if [[ $findCode != 0 ]]; then
+          wget "${fontGit}${typeface}.ttf"
+          mv "MesloLGS NF $typeface.ttf" "$HOME"/.local/share/fonts
+        fi
+      done
+    fi
+  fi
+}
+
+aurHelperInstall() {
+  git clone https://aur.archlinux.org/"$1".git
+  cd "$1" || exit
+  makepkg -si --noconfirm
+  cd ..
+  rm -rf "$1"
+  cd "$currentDir" || exit
+}
+
+pacmanInstall() {
+  if [[ $pacmanCode == 0 ]]; then
+    which paru > /dev/null 2>&1
+    paruCode=$?
+    which yay > /dev/null 2>&1
+    yayCode=$?
+    if [[ $paruCode != 0 && $yayCode != 0 ]]; then
+      echo -e "What AUR helper would you like?\n(1) paru\n(2) yay\n(3) skip"
+      read -r aurHelperChoice
+    fi
+    [[ $aurHelperChoice == 1 ]] && aurHelperInstall paru
+    [[ $aurHelperChoice == 2 ]] && aurHelperInstall yay
+    # install chaotic-aur
+    grep "chaotic-aur" /etc/pacman.conf > /dev/null 2>&1 
+    chaoticAurCode=$?
+    [[ $chaoticAurCode == 1 ]] && echo "Do you want chaotic-aur? (Y/N)" && read -r aurChoice
+    if [[ $aurChoice == "Y" || $aurChoice == "y" ]]; then
+      sudo pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
+      sudo pacman-key --lsign-key 3056513887B78AEB
+      sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 
+      sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' 
+      echo -e "[chaotic-aur]
+      Include = /etc/pacman.d/chaotic-mirrorlist" | sudo tee -a /etc/pacman.conf
+      sudo pacman -Syyu
+    fi
+  fi
+}
+
+dotfileInstall() {
+  echo "Do you want to install your dotfiles? (Y/N)"; read -r dotfileAnswer
+  [[ $dotfileAnswer == "N" || $dotfileAnswer == "n" ]] && return 0
+  echo "Please type your (full) dotfile repo url"
+  read -r gitRepo
+  chezmoi init
+  cd "$HOME"/.local/share/chezmoi
+  git remote -v | grep "."
+  chezmoiContents = $?
+  if [[ $chezmoiContents == 0 ]]; then
+    echo "Overwrite current chezmoi url? (Y/N)"
+    read -r chezmoiOverwrite
+    [[ $chezmoiOverwrite != "Y" || $chezmoiOverwrite != "y" ]] && return 0
+  fi
+  git remote add origin $gitRepo
+  git remote set-url $gitRepo
+  git pull origin master || git pull origin main
+  chezmoi apply
+}
+
+noRootAcess(){ echo "Root access disabled"; exit; }
+sudo echo "Root access enabled" || noRootAcess
+
+menuScreen() {
+  [[ $EUID == 0 ]] && echo "WARNING: You are running this script as root. Some features may not work properly." 
+  echo "Welcome to..."
+  echo -e " ${GREEN}
+           __         ____          __            
+     _____/ /_  ___  / / /_______  / /___  ______  
+    / ___/ __ \/ _ \/ / / ___/ _ \/ __/ / / / __ \ 
+   (__  ) / / /  __/ / (__  )  __/ /_/ /_/ / /_/ / 
+  /____/_/ /_/\___/_/_/____/\___/\__/\__,_/ .___/  
+                                         /_/      ${NC}"
+  while [[ $Menu == 1 ]]; do
+    echo -e "Do you want:\n(1) Full setup \n(2) Light setup \n(3) More info \n(4) Exit"
+    read -r choice
+    [[ $choice == 4 ]] && exit
+    [[ $choice != 1 && $choice != 2 && $choice != 3 ]] && exit
+    if [[ $choice == 3 ]]; then
+      echo -e "The full setup consists of all customisation options including setting the chosen shell as default, aliases, oh my (shell) installation and plugins. \nThe light setup consists of only essential tools and configurations."
+    elif [[ $choice == 1 || $choice == 2 ]]; then
+      echo -e "What shell do you want to use? \n(1) zsh \n(2) bash \n(3) fish \n(4) skip shell config"
+      read -r shell
+      [[ $shell != 1 && $shell != 2 && $shell != 3 && $shell != 4 ]] && exit
+      Menu=0
+    fi
+  done
+}
+
+clear
+
+# Start point
+main(){
+  menuScreen
+
+  [[ $shell == 1 ]] && shell="zsh" 
+  [[ $shell == 2 ]] && shell="bash"
+  [[ $shell == 3 ]] && shell="fish"
+  [[ $choice == 1 ]] && choice="full"
+  [[ $choice == 2 ]] && choice="lite"
+
+  # install packages
+  loopInstaller 
+
+  # install paru + chaotic-aur
+  pacmanInstall
+
+  dotfileInstall
+
+  fontInstall
+
+  echo "All packages installed"
+   
+  shellInstall 
+
+  [[ $choice == "zsh" && $shell == "full" ]] && echo "All changes made! Restart terminal for configuration of CLI. Make sure to change terminal font to your chosen font." && exec "/bin/$shell" && exit
+  echo -e "All changes made.\nEnjoy!"
+  exec "/bin/$shell"
+}
+
+main
